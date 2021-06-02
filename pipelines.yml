@@ -1,0 +1,56 @@
+resources:
+- name: RobiNino_mvn_example_pipelines_gitResource
+  type: GitRepo
+  configuration:
+    path: RobiNino/mvn-example-pipelines
+    gitProvider: github_RobiNino_mvn_example_pipelines_integration
+    buildOn:
+      pullRequestCreate: true
+    branches:
+      include: main
+- name: RobiNino_mvn_example_pipelines_buildInfoResource
+  type: BuildInfo
+  configuration:
+    sourceArtifactory: rt_RobiNino_mvn_example_pipelines_integration
+    buildName: mvn-example-pipelines-main
+    buildNumber: $run_number
+pipelines:
+- name: RobiNino_mvn_example_pipelines_pipeline
+  configuration:
+    environmentVariables:
+      readOnly:
+        CI: "true"
+        JFROG_CLI_BUILD_NAME: mvn-example-pipelines-main
+        JFROG_CLI_BUILD_NUMBER: $run_number
+        JFROG_CLI_BUILD_URL: $step_url
+  steps:
+  - name: MvnBuildStep
+    type: MvnBuild
+    configuration:
+      environmentVariables:
+        JFROG_BUILD_STATUS: PASS
+      integrations:
+      - name: rt_RobiNino_mvn_example_pipelines_integration
+      inputResources:
+      - name: RobiNino_mvn_example_pipelines_gitResource
+      mvnCommand: clean install
+      resolverSnapshotRepo: maven-virtual
+      resolverReleaseRepo: maven-virtual
+    execution:
+      onFailure:
+      - export JFROG_BUILD_STATUS=FAIL
+      - jfrog rt bce
+      - jfrog rt bp
+  - name: PublishBuildInfoStep
+    type: PublishBuildInfo
+    configuration:
+      inputResources:
+      - name: RobiNino_mvn_example_pipelines_gitResource
+      outputResources:
+      - name: RobiNino_mvn_example_pipelines_buildInfoResource
+      inputSteps:
+      - name: MvnBuildStep
+      forceXrayScan: true
+    execution:
+      onComplete:
+      - update_commit_status RobiNino_mvn_example_pipelines_gitResource
